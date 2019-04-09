@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <chrono>
 //Thread building blocks library
 #include <tbb/task_scheduler_init.h>
 //Free Image library
@@ -7,6 +8,18 @@
 
 using namespace std;
 using namespace tbb;
+using namespace chrono;
+
+// Applies a Gaussian blur to an image sequentially.
+// Returns: time elapsed to complete this function
+double sequentialGaussian()
+{
+    auto start = high_resolution_clock::now();
+
+    auto finish = high_resolution_clock::now();
+
+    return (finish - start).count();
+}
 
 int main()
 {
@@ -14,8 +27,7 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-
-
+    cout << "Sequential Gaussian attempt: " << sequentialGaussian() << endl;
 
 
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
