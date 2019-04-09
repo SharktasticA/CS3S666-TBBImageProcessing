@@ -1,20 +1,54 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <math.h>
 //Thread building blocks library
 #include <tbb/task_scheduler_init.h>
 //Free Image library
 #include <FreeImagePlus.h>
 
+#define _USE_MATH_DEFINES
+
 using namespace std;
 using namespace tbb;
 using namespace chrono;
 
-// Applies a Gaussian blur to an image sequentially.
-// Returns: time elapsed to complete this function
-double sequentialGaussian()
+// Loads specified image with FreeImagePlus
+// Returns: loaded fipImage in float format
+// Parameters:
+    // (path) relative file path to image
+fipImage loadImage(string path)
 {
+    fipImage iImg;
+    iImg.load(path.c_str());
+    iImg.convertToFloat();
+    return iImg;
+}
+
+// Applies a Gaussian blur to an image sequentially
+// Returns: time elapsed to complete this function
+// Parameters:
+    // (inPath) relative file path to input image
+    // (outPath) relative file path for desired output image
+double sequentialGaussian(string inPath, string outPath)
+{
+    fipImage iImg = loadImage(inPath);
+    unsigned int width = iImg.getWidth();
+    unsigned int height = iImg.getHeight();
+    vector<vector<float>> outPixels;
+    outPixels.resize(height, vector<float>(width));
+
+    float sigma = 1.0f;
+
     auto start = high_resolution_clock::now();
+
+    for (int i = 0; i < width; i++)
+    {
+        for (int j = 0; j < height; j++)
+        {
+            outPixels[j][i] = 0;
+        }
+    }
 
     auto finish = high_resolution_clock::now();
 
@@ -27,7 +61,7 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    cout << "Sequential Gaussian attempt: " << sequentialGaussian() << endl;
+    sequentialGaussian("../Images/render_1.png", "");
 
 
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
