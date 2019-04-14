@@ -16,13 +16,26 @@ using namespace chrono;
 // Loads specified image with FreeImagePlus
 // Returns: loaded fipImage in float format
 // Parameters:
-    // (path) relative file path to image
+    // (path) relative file path to load image
 fipImage loadImage(string path)
 {
     fipImage iImg;
     iImg.load(path.c_str());
     iImg.convertToFloat();
+    cout << "Opened " << path << endl;
     return iImg;
+}
+
+// Saves specified image with FreeImagePlus
+// Parameters:
+    // (oImg) given FreeImagePlus image to save
+    // (path) relative file path to save image
+void saveImage(fipImage oImg, string path)
+{
+    oImg.convertToType(FREE_IMAGE_TYPE::FIT_BITMAP);
+    oImg.convertTo24Bits();
+    cout << "Saved " << path << endl;
+    oImg.save(path.c_str());
 }
 
 // Applies a Gaussian blur to an image sequentially
@@ -33,25 +46,30 @@ fipImage loadImage(string path)
 double sequentialGaussian(string inPath, string outPath)
 {
     fipImage iImg = loadImage(inPath);
-    unsigned int width = iImg.getWidth();
-    unsigned int height = iImg.getHeight();
-    vector<vector<float>> outPixels;
-    outPixels.resize(height, vector<float>(width));
+    const int width = iImg.getWidth();
+    const int height = iImg.getHeight();
 
-    float sigma = 1.0f;
+    fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+    float* inPixels = (float*)iImg.accessPixels();
+    float* outPixels = (float*)oImg.accessPixels();
+
+    float sigma = 10.0f;
 
     auto start = high_resolution_clock::now();
 
-    for (int i = 0; i < width; i++)
+    for (int j = 0; j < height; j++)
     {
-        for (int j = 0; j < height; j++)
+        for (int i = 0; i < width; i++)
         {
-            outPixels[j][i] = 0;
+            float x = inPixels[j * width + i];
+            float y = inPixels[j * width + i];
+
+            outPixels[j * width + i] = 1.0f / (2.0f * float(M_PI) * pow(sigma, 2)) * exp(-((pow(x, 2) + sqrt((y, 2)) / (2.0f * pow(sigma, 2)))));
         }
     }
 
     auto finish = high_resolution_clock::now();
-
+    saveImage(oImg, outPath);
     return (finish - start).count();
 }
 
@@ -61,8 +79,9 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    sequentialGaussian("../Images/render_1.png", "");
+    cout << sequentialGaussian("../Images/render_1.png", "../Images/render_1_gaus.png");
 
+    return 0;
 
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
