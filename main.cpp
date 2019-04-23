@@ -6,6 +6,7 @@
 #include <tbb/task_scheduler_init.h>
 #include <tbb/tick_count.h>
 #include <tbb/parallel_for.h>
+#include <tbb/blocked_range2d.h>
 //Free Image library
 #include <FreeImagePlus.h>
 
@@ -13,6 +14,7 @@ using namespace std;
 using namespace tbb;
 
 bool debug = false;
+float sigma = 1;
 
 // Loads specified image with FreeImagePlus
 // Returns: loaded fipImage in float format
@@ -46,7 +48,7 @@ float gaussian2D(float x, float y, float sigma)
 }
 
 //
-vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
+vector<vector<float>> kernelGenerator(unsigned int size)
 {
     float sum = 0.0;
 
@@ -81,7 +83,46 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
 // Parameters:
     // (inPath) relative file path to input image
     // (outPath) relative file path for desired output image
-float sequentialGaussian(string inPath, string outPath, float strength = 2.0f, unsigned int kernelSize = 5)
+float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize = 5)
+{
+    auto start = tick_count::now();
+    fipImage iImg = loadImage(inPath);
+    const int width = iImg.getWidth();
+    const int height = iImg.getHeight();
+
+
+    fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+    float* inPixels = (float*)iImg.accessPixels();
+    float* outPixels = (float*)oImg.accessPixels();
+
+    vector<vector<float>> kernel = kernelGenerator(kernelSize);
+
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            for (int j = 0; j < kernelSize; j++)
+            {
+                for (int i = 0; i < kernelSize; i++)
+                {
+                    if (((y + j) < height && (y + j) >= 0) && ((x + i) < width && (x + i) >= 0))
+                        outPixels[y * width + x] += kernel[j][i] * inPixels[(y + j) * width + (x + i)];
+                }
+            }
+        }
+    }
+
+    saveImage(oImg, outPath);
+    auto finish = tick_count::now();
+    return (finish - start).seconds();
+}
+
+// Applies a Gaussian blur to an image parallelised
+// Returns: time elapsed to complete this function
+// Parameters:
+// (inPath) relative file path to input image
+// (outPath) relative file path for desired output image
+float parallelisedGaussian(string inPath, string outPath, unsigned int kernelSize = 5)
 {
     auto start = tick_count::now();
     fipImage iImg = loadImage(inPath);
@@ -92,21 +133,30 @@ float sequentialGaussian(string inPath, string outPath, float strength = 2.0f, u
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
-    vector<vector<float>> kernel = kernelGenerator(kernelSize, strength);
+    vector<vector<float>> kernel = kernelGenerator(kernelSize);
 
-    for (int y = 0; y < height; y++)
+    tbb::parallel_for(blocked_range2d<uint64_t, uint64_t>(0, height, 8, 0, width, width>>2), [=](const blocked_range2d<uint64_t, uint64_t>& range)
     {
-        for (int x = 0; x < width; x++)
+        auto yStart = range.rows().begin();
+        auto yEnd = range.rows().end();
+        auto xStart = range.cols().begin();
+        auto xEnd = range.cols().end();
+
+        for (int y = yStart; y != yEnd; y++)
         {
-            for (int j = 0; j < kernelSize; j++)
+            for (int x = xStart; x != xEnd; x++)
             {
-                for (int i = 0; i < kernelSize; i++)
+                for (int j = 0; j < kernelSize; j++)
                 {
-                    outPixels[y * width + x] += kernel[j][i] * inPixels[(y + j) * width + (x + i)];
+                    for (int i = 0; i < kernelSize; i++)
+                    {
+                        if (((y + j) < height && (y + j) >= 0) && ((x + i) < width && (x + i) >= 0))
+                            outPixels[y * width + x] += kernel[j][i] * inPixels[(y + j) * width + (x + i)];
+                    }
                 }
             }
         }
-    }
+    });
 
     saveImage(oImg, outPath);
     auto finish = tick_count::now();
@@ -119,9 +169,12 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_3.png", 2, 3) << endl;
-    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_9.png", 2, 9) << endl;
-    cout << "Sequential, 21x21 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_21.png", 2, 21) << endl;
+    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_3.png", 3) << endl;
+    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_9.png", 9) << endl;
+    cout << "Sequential, 21x21 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_21.png", 21) << endl;
+    cout << "Parallelised, 3x3 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_3.png", 3) << endl;
+    cout << "Parallelised, 9x9 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_9.png", 9) << endl;
+    cout << "Parallelised, 21x21 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_21.png", 21) << endl;
 
 
     return 0;
