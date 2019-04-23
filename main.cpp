@@ -4,14 +4,15 @@
 #include <math.h>
 //Thread building blocks library
 #include <tbb/task_scheduler_init.h>
+#include <tbb/tick_count.h>
+#include <tbb/parallel_for.h>
 //Free Image library
 #include <FreeImagePlus.h>
 
-#define _USE_MATH_DEFINES
-
 using namespace std;
 using namespace tbb;
-using namespace chrono;
+
+bool debug = false;
 
 // Loads specified image with FreeImagePlus
 // Returns: loaded fipImage in float format
@@ -22,7 +23,7 @@ fipImage loadImage(string path)
     fipImage iImg;
     iImg.load(path.c_str());
     iImg.convertToFloat();
-    cout << "Opened " << path << endl;
+    if (debug) cout << "Opened " << path << endl;
     return iImg;
 }
 
@@ -34,8 +35,45 @@ void saveImage(fipImage oImg, string path)
 {
     oImg.convertToType(FREE_IMAGE_TYPE::FIT_BITMAP);
     oImg.convertTo24Bits();
-    cout << "Saved " << path << endl;
+    if (debug) cout << "Saved " << path << endl;
     oImg.save(path.c_str());
+}
+
+//
+float gaussian2D(float x, float y, float sigma)
+{
+    return 1 / (2 * M_PI * pow(sigma, 2)) * exp(-(pow(x, 2) + pow(y, 2)) / (2 * pow(sigma, 2)));
+}
+
+//
+vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
+{
+    float sum = 0.0;
+
+    vector<vector<float>> kernel(size, vector<float>(size, 0));
+
+    if (debug) cout << "Kernel gen: " << endl;
+    for (int x = 0; x < size; x++)
+    {
+        for (int y = 0; y < size; y++)
+        {
+            sum += kernel[x][y] = gaussian2D(x - 2, y - 2, sigma);
+            if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
+        }
+    }
+
+    if (debug) cout << "Kernel sum: " << sum << endl;
+    if (debug) cout << "Kernel norm: " << endl;
+    for (int x = 0; x < size; x++)
+    {
+        for (int y = 0; y < size; y++)
+        {
+            kernel[x][y] /= sum;
+            if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
+        }
+    }
+
+    return kernel;
 }
 
 // Applies a Gaussian blur to an image sequentially
@@ -43,8 +81,9 @@ void saveImage(fipImage oImg, string path)
 // Parameters:
     // (inPath) relative file path to input image
     // (outPath) relative file path for desired output image
-double sequentialGaussian(string inPath, string outPath)
+float sequentialGaussian(string inPath, string outPath, float strength = 2.0f, unsigned int kernelSize = 5)
 {
+    auto start = tick_count::now();
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
@@ -53,24 +92,25 @@ double sequentialGaussian(string inPath, string outPath)
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
-    float sigma = 10.0f;
+    vector<vector<float>> kernel = kernelGenerator(kernelSize, strength);
 
-    auto start = high_resolution_clock::now();
-
-    for (int j = 0; j < height; j++)
+    for (int y = 0; y < height; y++)
     {
-        for (int i = 0; i < width; i++)
+        for (int x = 0; x < width; x++)
         {
-            float x = inPixels[j * width + i];
-            float y = inPixels[j * width + i];
-
-            outPixels[j * width + i] = 1.0f / (2.0f * float(M_PI) * pow(sigma, 2)) * exp(-((pow(x, 2) + sqrt((y, 2)) / (2.0f * pow(sigma, 2)))));
+            for (int j = 0; j < kernelSize; j++)
+            {
+                for (int i = 0; i < kernelSize; i++)
+                {
+                    outPixels[y * width + x] += kernel[j][i] * inPixels[(y + j) * width + (x + i)];
+                }
+            }
         }
     }
 
-    auto finish = high_resolution_clock::now();
     saveImage(oImg, outPath);
-    return (finish - start).count();
+    auto finish = tick_count::now();
+    return (finish - start).seconds();
 }
 
 int main()
@@ -79,10 +119,12 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    cout << sequentialGaussian("../Images/render_1.png", "../Images/render_1_gaus.png");
+    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_3.png", 2, 3) << endl;
+    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_9.png", 2, 9) << endl;
+    cout << "Sequential, 21x21 kernel: " << sequentialGaussian("../Images/550bj.png", "../Images/550bj_sequential_21.png", 2, 21) << endl;
+
 
     return 0;
-
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
     // Setup Input image array
