@@ -14,7 +14,7 @@ using namespace std;
 using namespace tbb;
 
 bool debug = false;
-float sigma = 1;
+float sigma = 2;
 
 // Loads specified image with FreeImagePlus
 // Returns: loaded fipImage in float format
@@ -42,7 +42,7 @@ void saveImage(fipImage oImg, string path)
 }
 
 //
-float gaussian2D(float x, float y, float sigma)
+float gaussian2D(int x, int y, float sigma)
 {
     return 1 / (2 * M_PI * pow(sigma, 2)) * exp(-(pow(x, 2) + pow(y, 2)) / (2 * pow(sigma, 2)));
 }
@@ -59,7 +59,7 @@ vector<vector<float>> kernelGenerator(unsigned int size)
     {
         for (int y = 0; y < size; y++)
         {
-            sum += kernel[x][y] = gaussian2D(x - 2, y - 2, sigma);
+            sum += kernel[x][y] = gaussian2D(x - int(size / 2), y - int(size / 2), sigma);
             if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
         }
     }
