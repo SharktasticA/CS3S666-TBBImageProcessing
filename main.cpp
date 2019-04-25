@@ -77,7 +77,7 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
     {
         for (int y = 0; y < size; y++)
         {
-            sum += kernel[x][y] = gauss(x - int(size / 2), y - int(size / 2), size);
+            sum += kernel[x][y] = gauss(x - int(size / 2), y - int(size / 2), sigma);
             if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
         }
     }
@@ -102,22 +102,21 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
     // (inPath) relative file path to input image
     // (outPath) relative file path for desired output image
     // (kernelSize) sampling kernel size (controls blur strength)
-float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize = 5)
+float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize)
 {
-    auto start = tick_count::now();
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
-
 
     fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
-    vector<vector<float>> kernel = kernelGenerator(kernelSize, height);
+    vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
+    auto start = tick_count::now();
     for (int y = 0; y < height; y++)
     {
         for (int x = 0; x < width; x++)
@@ -137,20 +136,19 @@ float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize 
         }
     }
 
-    saveImage(oImg, outPath);
     auto finish = tick_count::now();
+    saveImage(oImg, outPath);
     return (finish - start).seconds();
 }
 
-// Sequentially applies Gaussian blur to an image
+// Parallel applies Gaussian blur to an image
 // Returns: time elapsed to complete the process
 // Parameters:
     // (inPath) relative file path to input image
     // (outPath) relative file path for desired output image
     // (kernelSize) sampling kernel size (controls blur strength)
-float parallelisedGaussian(string inPath, string outPath, unsigned int kernelSize = 5)
+float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
 {
-    auto start = tick_count::now();
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
@@ -159,16 +157,17 @@ float parallelisedGaussian(string inPath, string outPath, unsigned int kernelSiz
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
-    vector<vector<float>> kernel = kernelGenerator(kernelSize, height);
+    vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
-    tbb::parallel_for(blocked_range2d<uint64_t, uint64_t>(0, height, 8, 0, width, width>>2), [=](const blocked_range2d<uint64_t, uint64_t>& range)
+    auto start = tick_count::now();
+    tbb::parallel_for(blocked_range2d<int, int>(0, height, 0, 0, width, 0), [=](const blocked_range2d<int, int>& range)
     {
-        auto yStart = range.rows().begin();
-        auto yEnd = range.rows().end();
-        auto xStart = range.cols().begin();
-        auto xEnd = range.cols().end();
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
 
         for (int y = yStart; y != yEnd; y++)
         {
@@ -190,9 +189,98 @@ float parallelisedGaussian(string inPath, string outPath, unsigned int kernelSiz
         }
     });
 
-    saveImage(oImg, outPath);
     auto finish = tick_count::now();
+    saveImage(oImg, outPath);
     return (finish - start).seconds();
+}
+
+// Parallel applies Gaussian blur to an image with
+// custom grain size
+// Returns: time elapsed to complete the process
+// Parameters:
+    // (inPath) relative file path to input image
+    // (outPath) relative file path for desired output image
+    // (kernelSize) sampling kernel size (controls blur strength)
+    // (grain) allows custom chunk size to be specified
+float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, int grain)
+{
+    fipImage iImg = loadImage(inPath);
+    const int width = iImg.getWidth();
+    const int height = iImg.getHeight();
+
+    fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+    float* inPixels = (float*)iImg.accessPixels();
+    float* outPixels = (float*)oImg.accessPixels();
+
+    vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
+    kernelSize = kernel.size();
+    int kernelHalf = kernelSize / 2;
+
+    auto start = tick_count::now();
+
+    tbb::parallel_for(blocked_range2d<int, int>(0, height, grain, 0, width, grain), [=](const blocked_range2d<int, int>& range)
+    {
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
+
+        for (int y = yStart; y != yEnd; y++)
+        {
+            for (int x = xStart; x != xEnd; x++)
+            {
+                if (kernelSize == 1) outPixels[y * width + x] += kernel[0][0] * inPixels[y * width + x];
+                else
+                {
+                    for (int j = -kernelHalf; j <= kernelHalf; j++)
+                    {
+                        for (int i = -kernelHalf; i <= kernelHalf; i++)
+                        {
+                            if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
+                                outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
+                        }
+                    }
+                }
+            }
+        }
+    }, simple_partitioner());
+
+    auto finish = tick_count::now();
+    saveImage(oImg, outPath);
+    return (finish - start).seconds();
+}
+
+// Test driver program used from obtaining test
+// results for different machines for the report.
+void machineTest()
+{
+    // Sequential tests
+    cout << "Sequential, 1x1 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_1.png", 1) << "s" << endl;
+    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_3.png", 3) << "s" << endl;
+    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_9.png", 9) << "s" << endl;
+    cout << "Sequential, 27x27 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_27.png", 27) << "s" << endl;
+    cout << "Sequential, 81x81 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_81.png", 81) << "s" << endl;
+
+    // Parallel auto chunk tests
+    cout << "Parallel, 1x1 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1.png", 1) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3.png", 3) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9.png", 9) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27.png", 27) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81.png", 81) << "s" << endl;
+
+    // Parallel 256 grain tests
+    cout << "Parallel, 1x1 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1_256.png", 1, 256) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3_256.png", 3, 256) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9_256.png", 9, 256) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27_256.png", 27, 256) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81_256.png", 81, 256) << "s" << endl;
+
+    // Parallel 2048 grain tests
+    cout << "Parallel, 1x1 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1_2048.png", 1, 2048) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3_2048.png", 3, 2048) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9_2048.png", 9, 2048) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27_2048.png", 27, 2048) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
 }
 
 int main()
@@ -201,20 +289,13 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
+    machineTest();
+    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 3);
+    //float parallelTest = parallelisedGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 3);
 
-    cout << "Sequential, 1x1 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_1.png", 1) << endl;
-    cout << "Parallel, 1x1 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_1.png", 1) << endl;
-    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_3.png", 3) << endl;
-    cout << "Parallel, 3x3 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_3.png", 3) << endl;
-    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_9.png", 9) << endl;
-    cout << "Parallel, 9x9 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_9.png", 9) << endl;
-    cout << "Sequential, 27x27 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_27.png", 27) << endl;
-    cout << "Parallel, 27x27 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_27.png", 27) << endl;
-    cout << "Sequential, 81x81 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_81.png", 81) << endl;
-    cout << "Parallel, 81x81 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_81.png", 81) << endl;
-    cout << "Sequential, 243x243 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_243.png", 243) << endl;
-    cout << "Parallel, 243x243 kernel: " << parallelisedGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallelised_243.png", 243) << endl;
-
+    //cout << "Sequential test: " << sequentialTest << "s" << endl;
+    //cout << "Parallel test: " << parallelTest << "s" << endl;
+    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
 
     return 0;
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
