@@ -60,7 +60,7 @@ float gauss(int x, int y, float sigma)
     // (sigma) Gaussian standard deviation
 vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
 {
-    // Ensures
+    // Ensure that the given kernel size is an odd number
     int remainder = size % 2;
     if (remainder == 0)
     {
@@ -68,21 +68,33 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
         if (debug) cout << "Kernel size corrected from " << size-1 << " to " << size << endl;
     }
 
+    // ∑(Gaussian distribution) used for normalizing
+    // kernel values later
     float sum = 0.0;
 
+    // Kernel (two-dimensional floats vector)
     vector<vector<float>> kernel(size, vector<float>(size, 0));
 
+    // Calculate Gaussian distribution for each
+    // Gaussian kernel position
     if (debug) cout << "Kernel gen: " << endl;
     for (int x = 0; x < size; x++)
     {
         for (int y = 0; y < size; y++)
         {
-            sum += kernel[x][y] = gauss(x - int(size / 2), y - int(size / 2), sigma);
+            // When sampling Gaussian distribution, offset x and y by
+            // half kernel size - doing the offset via the loop iterators
+            // causes crashes
+            kernel[x][y] = gauss(x - int(size / 2), y - int(size / 2), sigma);
+            sum += kernel[x][y];
             if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
         }
     }
 
     if (debug) cout << "Kernel sum: " << sum << endl;
+
+    // Normalize the kernel like a vector: kernel[x][y]
+    // as components, sum as magnitude
     if (debug) cout << "Kernel norm: " << endl;
     for (int x = 0; x < size; x++)
     {
@@ -104,18 +116,26 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
     // (kernelSize) sampling kernel size (controls blur strength)
 float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize)
 {
+    // Call for input image loading
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
 
+    // Initialise output image object
     fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+
+    // Create needed input and output buffers
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
+    // Generate a kernel with kernelSize as sigma
+    // (If time allows, come back and do standard deviation
+    // properly)
     vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
+    // Apply filter
     auto start = tick_count::now();
     for (int y = 0; y < height; y++)
     {
@@ -128,8 +148,13 @@ float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize)
                 {
                     for (int i = -kernelHalf; i <= kernelHalf; i++)
                     {
+                        // Ensure processing is within bounds
                         if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
+                        {
+                            // For each output pixel, convolute input sampling pixel with kernel
+                            // value
                             outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
+                        }
                     }
                 }
             }
@@ -149,20 +174,28 @@ float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize)
     // (kernelSize) sampling kernel size (controls blur strength)
 float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
 {
+    // Call for input image loading
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
 
+    // Initialise output image object
     fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+
+    // Create needed input and output buffers
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
+    // Generate a kernel with kernelSize as sigma
+    // (If time allows, come back and do standard deviation
+    // properly)
     vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
+    // Apply filter
     auto start = tick_count::now();
-    tbb::parallel_for(blocked_range2d<int, int>(0, height, 0, 0, width, 0), [=](const blocked_range2d<int, int>& range)
+    tbb::parallel_for(blocked_range2d<int, int>(0, height, 0, width), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
         int yEnd = range.rows().end();
@@ -180,8 +213,13 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
                     {
                         for (int i = -kernelHalf; i <= kernelHalf; i++)
                         {
+                            // Ensure processing is within bounds
                             if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
+                            {
+                                // For each output pixel, convolute input sampling pixel with kernel
+                                // value
                                 outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
+                            }
                         }
                     }
                 }
@@ -204,20 +242,27 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
     // (grain) allows custom chunk size to be specified
 float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, int grain)
 {
+    // Call for input image loading
     fipImage iImg = loadImage(inPath);
     const int width = iImg.getWidth();
     const int height = iImg.getHeight();
 
     fipImage oImg = fipImage(FIT_FLOAT, width, height, 24);
+
+    // Create needed input and output buffers
     float* inPixels = (float*)iImg.accessPixels();
     float* outPixels = (float*)oImg.accessPixels();
 
+    // Generate a kernel with kernelSize as sigma
+    // (If time allows, come back and do standard deviation
+    // properly)
     vector<vector<float>> kernel = kernelGenerator(kernelSize, kernelSize);
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
     auto start = tick_count::now();
 
+    // Apply filter
     tbb::parallel_for(blocked_range2d<int, int>(0, height, grain, 0, width, grain), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -236,8 +281,13 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, i
                     {
                         for (int i = -kernelHalf; i <= kernelHalf; i++)
                         {
+                            // Ensure processing is within bounds
                             if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
+                            {
+                                // For each output pixel, convolute input sampling pixel with kernel
+                                // value
                                 outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
+                            }
                         }
                     }
                 }
@@ -281,7 +331,7 @@ void machineTest()
     cout << "Parallel, 9x9 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9_2048.png", 9, 2048) << "s" << endl;
     cout << "Parallel, 27x27 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27_2048.png", 27, 2048) << "s" << endl;
     cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
-}
+ }
 
 int main()
 {
@@ -289,13 +339,14 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    machineTest();
-    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 3);
-    //float parallelTest = parallelisedGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 3);
+    //machineTest();
+    float sequentialTest = sequentialGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27);
+    float parallelTest = parallelGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27, 256);
 
-    //cout << "Sequential test: " << sequentialTest << "s" << endl;
-    //cout << "Parallel test: " << parallelTest << "s" << endl;
-    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
+    cout << "Sequential test: " << sequentialTest << "s" << endl;
+    cout << "Parallel test: " << parallelTest << "s" << endl;
+    cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
+    cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
 
     return 0;
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
