@@ -339,7 +339,8 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    //machineTest();
+    machineTest();
+    return 0;
     float sequentialTest = sequentialGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27);
     float parallelTest = parallelGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27, 256);
 
