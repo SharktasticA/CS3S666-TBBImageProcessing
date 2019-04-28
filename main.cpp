@@ -37,15 +37,21 @@ int main(void)
     int nt = task_scheduler_init::default_num_threads();
     task_scheduler_init T(nt);
 
-    //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    //machineTest();
-    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "grey_blurred.png", 27);
-    //float parallelTest = parallelGaussian("../Images/render_1.png", "grey_blurred.png", 27, 256);
+    // Used for testing Gaussian speeds in-depth for report
+    machineTest();
 
-    //cout << "Sequential test: " << sequentialTest << "s" << endl;
-    //cout << "Parallel test: " << parallelTest << "s" << endl;
-    //cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
-    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl << endl;
+    //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
+
+    // Run and record sequential and parallel Gaussian
+    // blur tests
+    float sequentialTest = sequentialGaussian("../Images/render_1.png", "grey_blurred.png", 27);
+    float parallelTest = parallelGaussian("../Images/render_1.png", "grey_blurred.png", 27);
+
+    // Print results
+    cout << "Sequential test: " << sequentialTest << "s" << endl;
+    cout << "Parallel test: " << parallelTest << "s" << endl;
+    cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
+    cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl << endl;
 
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
@@ -65,9 +71,12 @@ int main(void)
     vector<vector<RGBQUAD>> rgbValues;
     rgbValues.resize(height, vector<RGBQUAD>(width));
 
+    // Generate an image that has the absolute difference between
+    // both inputs, and use given threshold to filter out non-black colours
+    // into whites
     rgbValues = absDifference(inputImages, rgbValues, width, height, 2);
 
-    // Create output
+    // Fold rgbValues into output buffer
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -85,19 +94,30 @@ int main(void)
     //Save the processed image
     saveImage(outputImage, "RGB_processed.png");
 
+    // Image's total pixel count
     int totalPixels = width * height;
+
+    // Run parallel_reduce-based white pixel
+    // counter
     int whitePixels = countWhite(rgbValues, width, height);
+
+    // Percentage of white pixels to total pixels
     float whitePercent = whitePixels / totalPixels * 100;
 
     cout << "Total pixels: " << totalPixels << endl;
     cout << "White pixels: " << whitePixels << " (" << whitePercent << "% of total pixels)" << endl;
 
+    // Initialise a red pixel
     RGBQUAD redPixel;
     redPixel.rgbRed = 255;
+
+    // Generate random Y and X position for red pixel
     int randY = rand(0, height), randX = rand(0, width);
     rgbValues[randY][randX] = redPixel;
     cout << "Placed red pixel: " << randX << ", " << randY << endl;
 
+    // Run cancellation-enabled parralel_for-based
+    // colour locator
     vector<int> redLoc = findColour(rgbValues, width, height, redPixel);
     cout << "Found red pixel: " << redLoc[0] << ", " << redLoc[1] << endl;
 
@@ -437,11 +457,21 @@ void machineTest(void)
     cout << "Parallel, 9x9 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_9_2048.png", 9, 2048) << "s" << endl;
     cout << "Parallel, 27x27 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_27_2048.png", 27, 2048) << "s" << endl;
     cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
- }
+}
 
+// Computes the absolute difference between two given
+// images with parallel_for structure, and applies a 
+// threshold to convert non-black colours to absolute white
+// Returns: output RGB values after processing
+// Parameters:
+    // (inputs) input images
+    // (output) output RGB values
+    // (width) input/output image's width
+    // (height) input/output image's height
+    // (tshd) threshold until colour > white
 vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGBQUAD>> output, const unsigned int width, const unsigned int height, const unsigned int tshd)
 {
-// Generate image with absolute differences between given images
+    // Generate image with absolute differences between given images
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -475,6 +505,13 @@ vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGB
     return output;
 }
 
+// Counts number of white pixels with parallel_reduce
+// structure
+// Returns: count of white pixels found
+// Parameters:
+    // (input) output RGB values
+    // (width) input/output image's width
+    // (height) input/output image's height
 int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height)
 {
     return parallel_reduce(blocked_range2d<int, int>(0, height, 0, width), 0, [&](blocked_range2d<int, int> &range, int white) -> int
@@ -497,6 +534,15 @@ int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const un
     );
 }
 
+// Finds target pixel colour with parallel_for
+// structure, with cancellation enabled to break
+// processing target has been found
+// Returns: vector of found pixel's X and Y coord
+// Parameters:
+    // (input) output RGB values
+    // (width) input/output image's width
+    // (height) input/output image's height
+    // (target) pixel colour to find
 vector<int> findColour(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height, RGBQUAD target)
 {
     vector<int> returnIndex(2, 0);
