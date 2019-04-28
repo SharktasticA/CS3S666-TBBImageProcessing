@@ -213,8 +213,9 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
             // causes crashes
             kernel[x][y] = gauss(x - int(size / 2), y - int(size / 2), sigma);
             sum += kernel[x][y];
-            if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
+            if (debug) cout << kernel[x][y] << " ";
         }
+        if (debug) cout << endl;
     }
 
     if (debug) cout << "Kernel sum: " << sum << endl;
@@ -227,8 +228,9 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
         for (int y = 0; y < size; y++)
         {
             kernel[x][y] /= sum;
-            if (debug) cout << x << ":" << y << ": " << kernel[x][y] << endl;
+            if (debug) cout << kernel[x][y] << " ";
         }
+        if (debug) cout << endl;
     }
 
     return kernel;
