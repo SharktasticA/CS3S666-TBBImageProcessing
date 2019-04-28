@@ -6,6 +6,7 @@
 #include <tbb/tick_count.h>
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range2d.h>
+#include <tbb/parallel_reduce.h>
 #include <FreeImagePlus.h>
 
 using namespace std;
@@ -24,7 +25,7 @@ void machineTest(void);
 
 vector<vector<RGBQUAD>> absDifference(vector<fipImage>, vector<vector<RGBQUAD>>, const unsigned int, const unsigned int);
 vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int, const float, const float, const float);
-int findWhite(vector<vector<RGBQUAD>>);
+int countWhite(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int);
 
 // Flags debugging messages
 bool debug = false;
@@ -42,7 +43,7 @@ int main(void)
     //cout << "Sequential test: " << sequentialTest << "s" << endl;
     //cout << "Parallel test: " << parallelTest << "s" << endl;
     //cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
-    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
+    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl << endl;
 
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
@@ -82,6 +83,14 @@ int main(void)
 
     //Save the processed image
     saveImage(outputImage, "RGB_processed.png");
+
+    int totalPixels = width * height;
+    int whitePixels = countWhite(rgbValues, width, height);
+    float whitePercent = whitePixels / totalPixels * 100;
+
+    cout << "Total pixels: " << totalPixels << endl;
+    cout << "White pixels: " << whitePixels << " (" << whitePercent << "% of total pixels)" << endl;
+
     return 0;
 }
 
@@ -464,7 +473,24 @@ vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>> input, const unsign
     return input;
 }
 
-int findWhite(vector<vector<RGBQUAD>> input)
+int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height)
 {
+    return parallel_reduce(blocked_range2d<int, int>(0, height, 0, width), 0, [&](blocked_range2d<int, int> &range, int white) -> int
+        {
+            int yStart = range.rows().begin();
+            int yEnd = range.rows().end();
+            int xStart = range.cols().begin();
+            int xEnd = range.cols().end();
 
+            for(int y = yStart; y < yEnd; y++)
+            {
+                for (int x = xStart; x < xEnd; x++)
+                {
+                    float avg = (input[y][x].rgbRed + input[y][x].rgbGreen + input[y][x].rgbBlue) / 3;
+                    if (avg == 255) white++;
+                }
+            }
+
+        }, [&](int x, int y) -> int { return x + y; }
+    );
 }
