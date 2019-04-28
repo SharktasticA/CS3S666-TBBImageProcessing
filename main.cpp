@@ -195,7 +195,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
 
     // Apply filter
     auto start = tick_count::now();
-    tbb::parallel_for(blocked_range2d<int, int>(0, height, 0, width), [=](const blocked_range2d<int, int>& range)
+    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
         int yEnd = range.rows().end();
@@ -263,7 +263,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, i
     auto start = tick_count::now();
 
     // Apply filter
-    tbb::parallel_for(blocked_range2d<int, int>(0, height, grain, 0, width, grain), [=](const blocked_range2d<int, int>& range)
+    parallel_for(blocked_range2d<int, int>(0, height, grain, 0, width, grain), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
         int yEnd = range.rows().end();
@@ -305,32 +305,32 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, i
 void machineTest()
 {
     // Sequential tests
-    cout << "Sequential, 1x1 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_1.png", 1) << "s" << endl;
-    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_3.png", 3) << "s" << endl;
-    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_9.png", 9) << "s" << endl;
-    cout << "Sequential, 27x27 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_27.png", 27) << "s" << endl;
-    cout << "Sequential, 81x81 kernel: " << sequentialGaussian("../Images/thinkpads.png", "../Images/thinkpads_sequential_81.png", 81) << "s" << endl;
+    cout << "Sequential, 1x1 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_1.png", 1) << "s" << endl;
+    cout << "Sequential, 3x3 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_3.png", 3) << "s" << endl;
+    cout << "Sequential, 9x9 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_9.png", 9) << "s" << endl;
+    cout << "Sequential, 27x27 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_27.png", 27) << "s" << endl;
+    cout << "Sequential, 81x81 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_81.png", 81) << "s" << endl;
 
     // Parallel auto chunk tests
-    cout << "Parallel, 1x1 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1.png", 1) << "s" << endl;
-    cout << "Parallel, 3x3 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3.png", 3) << "s" << endl;
-    cout << "Parallel, 9x9 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9.png", 9) << "s" << endl;
-    cout << "Parallel, 27x27 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27.png", 27) << "s" << endl;
-    cout << "Parallel, 81x81 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81.png", 81) << "s" << endl;
+    cout << "Parallel, 1x1 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_1.png", 1) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_3.png", 3) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_9.png", 9) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_27.png", 27) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, auto chunk: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81.png", 81) << "s" << endl;
 
     // Parallel 256 grain tests
-    cout << "Parallel, 1x1 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1_256.png", 1, 256) << "s" << endl;
-    cout << "Parallel, 3x3 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3_256.png", 3, 256) << "s" << endl;
-    cout << "Parallel, 9x9 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9_256.png", 9, 256) << "s" << endl;
-    cout << "Parallel, 27x27 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27_256.png", 27, 256) << "s" << endl;
-    cout << "Parallel, 81x81 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81_256.png", 81, 256) << "s" << endl;
+    cout << "Parallel, 1x1 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_1_256.png", 1, 256) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_3_256.png", 3, 256) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_9_256.png", 9, 256) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_27_256.png", 27, 256) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, 256 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81_256.png", 81, 256) << "s" << endl;
 
     // Parallel 2048 grain tests
-    cout << "Parallel, 1x1 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_1_2048.png", 1, 2048) << "s" << endl;
-    cout << "Parallel, 3x3 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_3_2048.png", 3, 2048) << "s" << endl;
-    cout << "Parallel, 9x9 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_9_2048.png", 9, 2048) << "s" << endl;
-    cout << "Parallel, 27x27 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_27_2048.png", 27, 2048) << "s" << endl;
-    cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "../Images/thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
+    cout << "Parallel, 1x1 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_1_2048.png", 1, 2048) << "s" << endl;
+    cout << "Parallel, 3x3 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_3_2048.png", 3, 2048) << "s" << endl;
+    cout << "Parallel, 9x9 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_9_2048.png", 9, 2048) << "s" << endl;
+    cout << "Parallel, 27x27 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_27_2048.png", 27, 2048) << "s" << endl;
+    cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
  }
 
 int main()
@@ -339,25 +339,24 @@ int main()
     task_scheduler_init T(nt);
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    machineTest();
-    return 0;
-    float sequentialTest = sequentialGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27);
-    float parallelTest = parallelGaussian("../Images/render_1.png", "../Images/grey_blurred.png", 27, 256);
+    //machineTest();
+    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "grey_blurred.png", 27);
+    //float parallelTest = parallelGaussian("../Images/render_1.png", "grey_blurred.png", 27, 256);
 
-    cout << "Sequential test: " << sequentialTest << "s" << endl;
-    cout << "Parallel test: " << parallelTest << "s" << endl;
-    cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
-    cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
+    //cout << "Sequential test: " << sequentialTest << "s" << endl;
+    //cout << "Parallel test: " << parallelTest << "s" << endl;
+    //cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
+    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
 
-    return 0;
     //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
     // Setup Input image array
-    fipImage inputImage;
-    inputImage.load("../Images/thinkpads.png");
+    vector<fipImage> inputImages(2);
+    inputImages[0].load("../Images/render_1.png");
+    inputImages[1].load("../Images/render_2.png");
 
-    unsigned int width = inputImage.getWidth();
-    unsigned int height = inputImage.getHeight();
+    unsigned int width = inputImages[0].getWidth();
+    unsigned int height = inputImages[0].getHeight();
 
     // Setup Output image array
     fipImage outputImage;
@@ -367,30 +366,37 @@ int main()
     vector<vector<RGBQUAD>> rgbValues;
     rgbValues.resize(height, vector<RGBQUAD>(width));
 
-
-    RGBQUAD rgb;  //FreeImage structure to hold RGB values of a single pixel
-
-    //Extract colour data from image and store it as individual RGBQUAD elements for every pixel
-    for(int y = 0; y < height; y++)
+    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
-        for (int x = 0; x < width; x++)
-        {
-            inputImage.getPixelColor(x, y, &rgb); //Extract pixel(x,y) colour data and place it in rgb
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
 
-            rgbValues[y][x].rgbRed = rgb.rgbRed;
-            rgbValues[y][x].rgbGreen = rgb.rgbGreen;
-            rgbValues[y][x].rgbBlue = rgb.rgbBlue;
-        }
-    }
+        //FreeImage structure to hold RGB values of a single pixel
+        vector<RGBQUAD> rgb(2);
 
-    //Place the pixel colour values into output image
-    for(int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
+        for(int y = yStart; y < yEnd; y++)
         {
-            outputImage.setPixelColor(x, y, &rgbValues[y][x]);
+            for (int x = xStart; x < xEnd; x++)
+            {
+                for (int i = 0; i < inputImages.size(); i++)
+                    inputImages[i].getPixelColor(x, y, &rgb[i]); //Extract pixel(x,y) colour data and place it in rgb
+
+                if ((abs(rgb[0].rgbRed - rgb[1].rgbRed) != 0) &&
+                (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) != 0) &&
+                (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) != 0))
+                {
+                    //Extract colour data from image and store it as individual RGBQUAD elements for every pixel
+                    rgbValues[y][x].rgbRed = 255;
+                    rgbValues[y][x].rgbGreen = 255;
+                    rgbValues[y][x].rgbBlue = 255;
+                }
+
+                outputImage.setPixelColor(x, y, &rgbValues[y][x]);
+            }
         }
-    }
+    });
 
     //Save the processed image
     outputImage.save("RGB_processed.png");
