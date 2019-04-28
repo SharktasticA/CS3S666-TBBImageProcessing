@@ -8,12 +8,14 @@
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_reduce.h>
 #include <FreeImagePlus.h>
+#include <random>
 
 using namespace std;
 using namespace tbb;
 
 fipImage loadImage(string, bool);
 void saveImage(fipImage, string);
+int rand(const int, const int);
 
 float gauss(int, int, float);
 vector<vector<float>> kernelGenerator(unsigned int, float);
@@ -23,9 +25,9 @@ float parallelGaussian(string, string, unsigned int);
 float parallelGaussian(string, string, unsigned int, const int);
 void machineTest(void);
 
-vector<vector<RGBQUAD>> absDifference(vector<fipImage>, vector<vector<RGBQUAD>>, const unsigned int, const unsigned int);
-vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int, const float, const float, const float);
+vector<vector<RGBQUAD>> absDifference(vector<fipImage>, vector<vector<RGBQUAD>>, const unsigned int, const unsigned int, const unsigned int);
 int countWhite(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int);
+vector<int> findColour(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int, RGBQUAD);
 
 // Flags debugging messages
 bool debug = false;
@@ -63,8 +65,7 @@ int main(void)
     vector<vector<RGBQUAD>> rgbValues;
     rgbValues.resize(height, vector<RGBQUAD>(width));
 
-    rgbValues = absDifference(inputImages, rgbValues, width, height);
-    rgbValues = binThreshold(rgbValues, width, height, 0, 255, 0);
+    rgbValues = absDifference(inputImages, rgbValues, width, height, 2);
 
     // Create output
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
@@ -90,6 +91,15 @@ int main(void)
 
     cout << "Total pixels: " << totalPixels << endl;
     cout << "White pixels: " << whitePixels << " (" << whitePercent << "% of total pixels)" << endl;
+
+    RGBQUAD redPixel;
+    redPixel.rgbRed = 255;
+    int randY = rand(0, height), randX = rand(0, width);
+    rgbValues[randY][randX] = redPixel;
+    cout << "Placed red pixel: " << randX << ", " << randY << endl;
+
+    vector<int> redLoc = findColour(rgbValues, width, height, redPixel);
+    cout << "Found red pixel: " << redLoc[0] << ", " << redLoc[1] << endl;
 
     return 0;
 }
@@ -118,6 +128,21 @@ void saveImage(fipImage oImg, string path)
     oImg.convertTo24Bits();
     if (debug) cout << "Saved " << path << endl;
     oImg.save(path.c_str());
+}
+
+// Pseudorandom number generation with Mersenne Twister
+// 19937
+// Parameters:
+    // (min) minimum rand bound
+    // (max) maximum rand bound
+int rand(const int min, const int max)
+{
+    int result;
+    random_device rand;
+    mt19937 mersenne(rand());
+    uniform_int_distribution<int> dist(min, max);
+    result = dist(mersenne);
+    return result;
 }
 
 // Calculates the 2-dimensional Gaussian distribution for
@@ -414,7 +439,7 @@ void machineTest(void)
     cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
  }
 
-vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGBQUAD>> output, const unsigned int width, const unsigned int height)
+vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGBQUAD>> output, const unsigned int width, const unsigned int height, const unsigned int tshd)
 {
 // Generate image with absolute differences between given images
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
@@ -434,9 +459,9 @@ vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGB
                 for (int i = 0; i < inputs.size(); i++)
                     inputs[i].getPixelColor(x, y, &rgb[i]); //Extract pixel(x,y) colour data and place it in rgb
 
-                if ((abs(rgb[0].rgbRed - rgb[1].rgbRed) != 0) &&
-                    (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) != 0) &&
-                    (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) != 0))
+                if ((abs(rgb[0].rgbRed - rgb[1].rgbRed) >= tshd) &&
+                    (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) >= tshd) &&
+                    (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) >= tshd))
                 {
                     //Extract colour data from image and store it as individual RGBQUAD elements for every pixel
                     output[y][x].rgbRed = 255;
@@ -448,29 +473,6 @@ vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGB
     });
 
     return output;
-}
-
-vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height, const float tshd, const float max, const float change)
-{
-    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
-    {
-        int yStart = range.rows().begin();
-        int yEnd = range.rows().end();
-        int xStart = range.cols().begin();
-        int xEnd = range.cols().end();
-
-        for(int y = yStart; y < yEnd; y++)
-        {
-            for (int x = xStart; x < xEnd; x++)
-            {
-                input[y][x].rgbRed = input[y][x].rgbRed > tshd ? max : change;
-                input[y][x].rgbGreen = input[y][x].rgbGreen > tshd ? max : change;
-                input[y][x].rgbBlue = input[y][x].rgbBlue > tshd ? max : change;
-            }
-        }
-    });
-
-    return input;
 }
 
 int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height)
@@ -493,4 +495,36 @@ int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const un
 
         }, [&](int x, int y) -> int { return x + y; }
     );
+}
+
+vector<int> findColour(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height, RGBQUAD target)
+{
+    vector<int> returnIndex(2, 0);
+
+    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
+    {
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
+
+        for (int y = yStart; y != yEnd; y++)
+        {
+            for (int x = xStart; x != xEnd; x++)
+            {
+                if ((input[y][x].rgbRed == target.rgbRed) &&
+                (input[y][x].rgbGreen == target.rgbGreen) &&
+                (input[y][x].rgbBlue == target.rgbBlue))
+                {
+                    if (task::self().cancel_group_execution())
+                    {
+                        returnIndex[0] = x;
+                        returnIndex[1] = y;
+                    }
+                }
+            }
+        }
+    });
+
+    return returnIndex;
 }
