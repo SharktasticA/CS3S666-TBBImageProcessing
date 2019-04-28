@@ -11,18 +11,90 @@
 using namespace std;
 using namespace tbb;
 
+fipImage loadImage(string, bool);
+void saveImage(fipImage, string);
+
+float gauss(int, int, float);
+vector<vector<float>> kernelGenerator(unsigned int, float);
+float sequentialGaussian(string, string, unsigned int);
+float parallelGaussian(string, string, unsigned int);
+float parallelGaussian(string, string, unsigned int);
+float parallelGaussian(string, string, unsigned int, const int);
+void machineTest(void);
+
+vector<vector<RGBQUAD>> absDifference(vector<fipImage>, vector<vector<RGBQUAD>>, const unsigned int, const unsigned int);
+vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>>, const unsigned int, const unsigned int, const float, const float, const float);
+int findWhite(vector<vector<RGBQUAD>>);
+
 // Flags debugging messages
 bool debug = false;
+
+int main(void)
+{
+    int nt = task_scheduler_init::default_num_threads();
+    task_scheduler_init T(nt);
+
+    //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
+    //machineTest();
+    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "grey_blurred.png", 27);
+    //float parallelTest = parallelGaussian("../Images/render_1.png", "grey_blurred.png", 27, 256);
+
+    //cout << "Sequential test: " << sequentialTest << "s" << endl;
+    //cout << "Parallel test: " << parallelTest << "s" << endl;
+    //cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
+    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
+
+    //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
+
+    // Setup Input image array
+    vector<fipImage> inputImages(2);
+    inputImages[0] = loadImage("../Images/render_1.png", false);
+    inputImages[1] = loadImage("../Images/render_2.png", false);
+
+    unsigned int width = inputImages[0].getWidth();
+    unsigned int height = inputImages[0].getHeight();
+
+    // Setup Output image array
+    fipImage outputImage;
+    outputImage = fipImage(FIT_BITMAP, width, height, 24);
+
+    // 2D Vector to hold the RGB colour data of an image
+    vector<vector<RGBQUAD>> rgbValues;
+    rgbValues.resize(height, vector<RGBQUAD>(width));
+
+    rgbValues = absDifference(inputImages, rgbValues, width, height);
+    rgbValues = binThreshold(rgbValues, width, height, 0, 255, 0);
+
+    // Create output
+    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
+    {
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
+
+        for(int y = yStart; y < yEnd; y++)
+        {
+            for (int x = xStart; x < xEnd; x++)
+                outputImage.setPixelColor(x, y, &rgbValues[y][x]);
+        }
+    });
+
+    //Save the processed image
+    saveImage(outputImage, "RGB_processed.png");
+    return 0;
+}
 
 // Loads specified image with FreeImagePlus
 // Returns: loaded fipImage in float format
 // Parameters:
     // (path) relative file path to load image
-fipImage loadImage(string path)
+    // (asFloat) flags whether image should be float (greyscale)
+fipImage loadImage(string path, bool asFloat = true)
 {
     fipImage iImg;
     iImg.load(path.c_str());
-    iImg.convertToFloat();
+    if (asFloat) iImg.convertToFloat();
     if (debug) cout << "Opened " << path << endl;
     return iImg;
 }
@@ -240,7 +312,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
     // (outPath) relative file path for desired output image
     // (kernelSize) sampling kernel size (controls blur strength)
     // (grain) allows custom chunk size to be specified
-float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, int grain)
+float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, const int grain)
 {
     // Call for input image loading
     fipImage iImg = loadImage(inPath);
@@ -302,7 +374,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, i
 
 // Test driver program used from obtaining test
 // results for different machines for the report.
-void machineTest()
+void machineTest(void)
 {
     // Sequential tests
     cout << "Sequential, 1x1 kernel: " << sequentialGaussian("../Images/thinkpads.png", "thinkpads_sequential_1.png", 1) << "s" << endl;
@@ -333,39 +405,9 @@ void machineTest()
     cout << "Parallel, 81x81 kernel, 2048 grain: " << parallelGaussian("../Images/thinkpads.png", "thinkpads_parallel_81_2048.png", 81, 2048) << "s" << endl;
  }
 
-int main()
+vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGBQUAD>> output, const unsigned int width, const unsigned int height)
 {
-    int nt = task_scheduler_init::default_num_threads();
-    task_scheduler_init T(nt);
-
-    //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-    //machineTest();
-    //float sequentialTest = sequentialGaussian("../Images/render_1.png", "grey_blurred.png", 27);
-    //float parallelTest = parallelGaussian("../Images/render_1.png", "grey_blurred.png", 27, 256);
-
-    //cout << "Sequential test: " << sequentialTest << "s" << endl;
-    //cout << "Parallel test: " << parallelTest << "s" << endl;
-    //cout << "Difference: " << sequentialTest - parallelTest << "s" << endl;
-    //cout << "Speed increase: " << (sequentialTest / parallelTest) * 100 << "%" << endl;
-
-    //Part 2 (Colour image processing): -----------DO NOT REMOVE THIS COMMENT----------------------------//
-
-    // Setup Input image array
-    vector<fipImage> inputImages(2);
-    inputImages[0].load("../Images/render_1.png");
-    inputImages[1].load("../Images/render_2.png");
-
-    unsigned int width = inputImages[0].getWidth();
-    unsigned int height = inputImages[0].getHeight();
-
-    // Setup Output image array
-    fipImage outputImage;
-    outputImage = fipImage(FIT_BITMAP, width, height, 24);
-
-    //2D Vector to hold the RGB colour data of an image
-    vector<vector<RGBQUAD>> rgbValues;
-    rgbValues.resize(height, vector<RGBQUAD>(width));
-
+// Generate image with absolute differences between given images
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -380,26 +422,49 @@ int main()
         {
             for (int x = xStart; x < xEnd; x++)
             {
-                for (int i = 0; i < inputImages.size(); i++)
-                    inputImages[i].getPixelColor(x, y, &rgb[i]); //Extract pixel(x,y) colour data and place it in rgb
+                for (int i = 0; i < inputs.size(); i++)
+                    inputs[i].getPixelColor(x, y, &rgb[i]); //Extract pixel(x,y) colour data and place it in rgb
 
                 if ((abs(rgb[0].rgbRed - rgb[1].rgbRed) != 0) &&
-                (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) != 0) &&
-                (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) != 0))
+                    (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) != 0) &&
+                    (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) != 0))
                 {
                     //Extract colour data from image and store it as individual RGBQUAD elements for every pixel
-                    rgbValues[y][x].rgbRed = 255;
-                    rgbValues[y][x].rgbGreen = 255;
-                    rgbValues[y][x].rgbBlue = 255;
+                    output[y][x].rgbRed = 255;
+                    output[y][x].rgbGreen = 255;
+                    output[y][x].rgbBlue = 255;
                 }
-
-                outputImage.setPixelColor(x, y, &rgbValues[y][x]);
             }
         }
     });
 
-    //Save the processed image
-    outputImage.save("RGB_processed.png");
+    return output;
+}
 
-    return 0;
+vector<vector<RGBQUAD>> binThreshold(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height, const float tshd, const float max, const float change)
+{
+    parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
+    {
+        int yStart = range.rows().begin();
+        int yEnd = range.rows().end();
+        int xStart = range.cols().begin();
+        int xEnd = range.cols().end();
+
+        for(int y = yStart; y < yEnd; y++)
+        {
+            for (int x = xStart; x < xEnd; x++)
+            {
+                input[y][x].rgbRed = input[y][x].rgbRed > tshd ? max : change;
+                input[y][x].rgbGreen = input[y][x].rgbGreen > tshd ? max : change;
+                input[y][x].rgbBlue = input[y][x].rgbBlue > tshd ? max : change;
+            }
+        }
+    });
+
+    return input;
+}
+
+int findWhite(vector<vector<RGBQUAD>> input)
+{
+
 }
