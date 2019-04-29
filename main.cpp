@@ -38,7 +38,7 @@ int main(void)
     task_scheduler_init T(nt);
 
     // Used for testing Gaussian speeds in-depth for report
-    machineTest();
+    //machineTest();
 
     //Part 1 (Greyscale Gaussian blur): -----------DO NOT REMOVE THIS COMMENT----------------------------//
 
@@ -74,9 +74,10 @@ int main(void)
     // Generate an image that has the absolute difference between
     // both inputs, and use given threshold to filter out non-black colours
     // into whites
-    rgbValues = absDifference(inputImages, rgbValues, width, height, 2);
+    rgbValues = absDifference(inputImages, rgbValues, width, height, 3);
 
     // Fold rgbValues into output buffer
+                // Desired range is image size                  capture by copy
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -101,11 +102,8 @@ int main(void)
     // counter
     int whitePixels = countWhite(rgbValues, width, height);
 
-    // Percentage of white pixels to total pixels
-    float whitePercent = whitePixels / totalPixels * 100;
-
     cout << "Total pixels: " << totalPixels << endl;
-    cout << "White pixels: " << whitePixels << " (" << whitePercent << "% of total pixels)" << endl;
+    cout << "White pixels: " << whitePixels << " (" << (whitePixels / float(totalPixels)) * 100 << "% of total pixels)" << endl;
 
     // Initialise a red pixel
     RGBQUAD redPixel;
@@ -238,7 +236,7 @@ vector<vector<float>> kernelGenerator(unsigned int size, float sigma)
 
 // Sequentially applies Gaussian blur to an image
 // Returns: time elapsed to complete the process
-// Parameters:
+// Parameteres:
     // (inPath) relative file path to input image
     // (outPath) relative file path for desired output image
     // (kernelSize) sampling kernel size (controls blur strength)
@@ -279,7 +277,7 @@ float sequentialGaussian(string inPath, string outPath, unsigned int kernelSize)
                         // Ensure processing is within bounds
                         if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
                         {
-                            // For each output pixel, convolute input sampling pixel with kernel
+                            // For each output pixel, convolve input sampling pixel with kernel
                             // value
                             outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
                         }
@@ -321,8 +319,8 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
     kernelSize = kernel.size();
     int kernelHalf = kernelSize / 2;
 
-    // Apply filter
     auto start = tick_count::now();
+                // Desired range is image size                      capture by copy
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -344,7 +342,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize)
                             // Ensure processing is within bounds
                             if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
                             {
-                                // For each output pixel, convolute input sampling pixel with kernel
+                                // For each output pixel, convolve input sampling pixel with kernel
                                 // value
                                 outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
                             }
@@ -389,8 +387,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, c
     int kernelHalf = kernelSize / 2;
 
     auto start = tick_count::now();
-
-    // Apply filter
+                // Desired range is image size          Use given grain size    capture by copy
     parallel_for(blocked_range2d<int, int>(0, height, grain, 0, width, grain), [=](const blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -412,7 +409,7 @@ float parallelGaussian(string inPath, string outPath, unsigned int kernelSize, c
                             // Ensure processing is within bounds
                             if (((y + j) > 0 && (x + i) > 0) && ((y + j) < height && (x + i) < width))
                             {
-                                // For each output pixel, convolute input sampling pixel with kernel
+                                // For each output pixel, convolve input sampling pixel with kernel
                                 // value
                                 outPixels[y * width + x] += kernel[i + kernelHalf][j + kernelHalf] * inPixels[(y + j) * width + (x + i)];
                             }
@@ -470,10 +467,10 @@ void machineTest(void)
     // (output) output RGB values
     // (width) input/output image's width
     // (height) input/output image's height
-    // (tshd) threshold until colour > white
+    // (tshd) threshold until colour -> white
 vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGBQUAD>> output, const unsigned int width, const unsigned int height, const unsigned int tshd)
 {
-    // Generate image with absolute differences between given images
+                // Desired range is image size                   capture by reference
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -481,24 +478,37 @@ vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGB
         int xStart = range.cols().begin();
         int xEnd = range.cols().end();
 
-        //FreeImage structure to hold RGB values of a single pixel
-        vector<RGBQUAD> rgb(2);
+        // FreeImage structure to hold RGB values of a single pixel
+        // Modified into vector to provide multiple inputs a RGBQUAD
+        // to extract pixel colour into
+        vector<RGBQUAD> rgb(inputs.size());
 
         for(int y = yStart; y < yEnd; y++)
         {
             for (int x = xStart; x < xEnd; x++)
             {
+                // For each input, extract pixel(x,y) colour data and place
+                // it in it's unique RGBQUAD
                 for (int i = 0; i < inputs.size(); i++)
-                    inputs[i].getPixelColor(x, y, &rgb[i]); //Extract pixel(x,y) colour data and place it in rgb
+                    inputs[i].getPixelColor(x, y, &rgb[i]);
 
+                // Subtract the two input's respective RGBQUAD's channels against each other
+                // to see if there's a difference that breaches the specified (binary) threshold
                 if ((abs(rgb[0].rgbRed - rgb[1].rgbRed) >= tshd) &&
                     (abs(rgb[0].rgbGreen - rgb[1].rgbGreen) >= tshd) &&
                     (abs(rgb[0].rgbBlue - rgb[1].rgbBlue) >= tshd))
                 {
-                    //Extract colour data from image and store it as individual RGBQUAD elements for every pixel
+                    // If threshold breached, set pixel to white
                     output[y][x].rgbRed = 255;
                     output[y][x].rgbGreen = 255;
                     output[y][x].rgbBlue = 255;
+                }
+                else
+                {
+                    // Otherwise, ensure it's black
+                    output[y][x].rgbRed = 0;
+                    output[y][x].rgbGreen = 0;
+                    output[y][x].rgbBlue = 0;
                 }
             }
         }
@@ -516,7 +526,7 @@ vector<vector<RGBQUAD>> absDifference(vector<fipImage> inputs, vector<vector<RGB
     // (height) input/output image's height
 int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height)
 {
-    return parallel_reduce(blocked_range2d<int, int>(0, height, 0, width), 0, [&](blocked_range2d<int, int> &range, int white) -> int
+    return parallel_reduce(blocked_range2d<int, int>(0, height, 0, width), 0, [&](blocked_range2d<int, int>& range, int white) -> int
         {
             int yStart = range.rows().begin();
             int yEnd = range.rows().end();
@@ -527,7 +537,10 @@ int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const un
             {
                 for (int x = xStart; x < xEnd; x++)
                 {
+                    // Calculate the current pixel's average colour
                     float avg = (input[y][x].rgbRed + input[y][x].rgbGreen + input[y][x].rgbBlue) / 3;
+
+                    // If average is 255, increment the white pixel counter
                     if (avg == 255) white++;
                 }
             }
@@ -547,8 +560,11 @@ int countWhite(vector<vector<RGBQUAD>> input, const unsigned int width, const un
     // (target) pixel colour to find
 vector<int> findColour(vector<vector<RGBQUAD>> input, const unsigned int width, const unsigned int height, RGBQUAD target)
 {
+    // For storing the index colour is found at
+    // outside the parallelised structure
     vector<int> returnIndex(2, 0);
 
+                // Desired range is image size                   capture by reference
     parallel_for(blocked_range2d<int, int>(0, height, 0, width), [&](blocked_range2d<int, int>& range)
     {
         int yStart = range.rows().begin();
@@ -564,8 +580,12 @@ vector<int> findColour(vector<vector<RGBQUAD>> input, const unsigned int width, 
                 (input[y][x].rgbGreen == target.rgbGreen) &&
                 (input[y][x].rgbBlue == target.rgbBlue))
                 {
+                    // If colour found, attempt to cancel the
+                    // rest of the operation
                     if (task::self().cancel_group_execution())
                     {
+                        // Specify return index once cancel_group_execution()
+                        // flags cancellation is confirmed
                         returnIndex[0] = x;
                         returnIndex[1] = y;
                     }
