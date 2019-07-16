@@ -6,5 +6,9 @@ CS3S666: Parallel & Concurrent Programming
 * CLion
 * C++ 11 compiler
 * CMake 3.6 or newer
+* libtbb-dev 
+* libfreeimage3
+* libfreeimage-dev
+* libfreeimageplus-dev
 # Grade
 88 (Distinction)
